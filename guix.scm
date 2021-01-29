@@ -23,6 +23,8 @@
   (gnu packages bioinformatics)
   (gnu packages build-tools)
   (gnu packages curl)
+  (gnu packages kerberos)  ;; for static curl
+  (gnu packages openldap)  ;; for static curl
   (gnu packages llvm)
   (gnu packages ninja)
   (gnu packages parallel)
@@ -64,12 +66,14 @@
        ;; ("lld" ,lld)          ; add this to test clang builds
        ("bc" ,bc)               ; for tests
        ("coreutils" ,coreutils) ; for echo and env in tests
-       ("curl" ,curl)
+       ; ("curl:static" ,curl "static")
+       ("mit-krb5" ,mit-krb5)
        ("perl6-tap-harness" ,perl6-tap-harness) ; for tests
        ("parallel" ,parallel) ; for freebayes-parallel
-       ("zlib" ,zlib)
-       ("xz" ,xz)          ; liblzma part of htslib
-       ("bzip2" ,bzip2)    ; libz2 part of htslib
+       ("openldap" ,openldap)
+       ("zlib:static" ,zlib "static")
+       ("xz:static" ,xz "static")          ; liblzma part of htslib
+       ("bzip2:static" ,bzip2 "static")    ; libz2 part of htslib
        ))
     (arguments
      `(#:phases (modify-phases %standard-phases

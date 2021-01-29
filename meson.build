@@ -12,14 +12,15 @@ project('freebayes', ['cpp', 'c'],
 
 cc = meson.get_compiler('cpp')
 
-zlib_dep = dependency('zlib')
-lzma_dep = dependency('liblzma')
-thread_dep = dependency('threads')
+zlib_dep = dependency('zlib', static : true)
+lzma_dep = dependency('liblzma', static : true)
+thread_dep = dependency('threads', static : true)
+# curl_dep = dependency('libcurl', static : true)
 
-htslib_dep = dependency('htslib', required : false)
+htslib_dep = dependency('htslib-static', static : true, required : false)
 tabixpp_dep = cc.find_library('tabixpp', required : false)
-vcflib_dep = dependency('libvcflib', required : false)
-seqlib_dep = dependency('libseqlib', required : false)
+vcflib_dep = dependency('libvcflib', static: true, required : false)
+seqlib_dep = dependency('libseqlib', static: true, required : false)
 
 # for setting a warning_level on the external code in custom_* targets below
 warn_quiet = ['warning_level=0']
@@ -204,6 +205,7 @@ executable('freebayes',
            dependencies: [zlib_dep, lzma_dep, thread_dep,
                           htslib_dep, tabixpp_dep, vcflib_dep, seqlib_dep],
            link_with : freebayes_lib,
+           link_args: ['-static'],
            install: true
           )
 
