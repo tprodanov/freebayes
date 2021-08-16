@@ -153,9 +153,7 @@ void AlleleParser::openOutputFile(void) {
     }
 
     if (parameters.readAlleleObsFile != "") {
-        readAlleleObs.open(parameters.readAlleleObsFile.c_str(), ios::out);
-        readAlleleObs << "pos\tsample\tread\tmate\tallele\tln_qual\n";
-        readAlleleObs.precision(2);
+        readAlleleObs.open(parameters.readAlleleObsFile.c_str(), ios::out & ios::binary);
     }
 }
 
@@ -572,6 +570,9 @@ string AlleleParser::vcfHeader() {
 
 
 void AlleleParser::setupVCFOutput(void) {
+    if (readAlleleObs.is_open()) {
+        return;
+    }
     string vcfheader = vcfHeader();
     variantCallFile.openForOutput(vcfheader);
 }
@@ -3355,22 +3356,25 @@ void AlleleParser::buildHaplotypeAlleles(
         DEBUG("done updating");
 
         if (readAlleleObs.is_open()) {
-            readAlleleObs << currentSequenceName << ":" << currentPosition + 1;
-            for (vector<Allele*>::iterator h = haplotypeObservations.begin(); h != haplotypeObservations.end(); ++h) {
-                if ((*h)->position == currentPosition && (*h)->referenceLength == haplotypeLength) {
-                    readAlleleObs << '\t' << (*h)->sampleID << '\t' << (*h)->readID
-                        << '\t' << ((*h)->isFirstMate ? 1 : 2)
-                        << '\t' << (*h)->alternateSequence << '\t' << -(*h)->lnquality << '\n';
-                }
-            }
-            for (vector<Allele*>::iterator p = partialHaplotypeObservations.begin();
-                    p != partialHaplotypeObservations.end(); ++p) {
-                if ((*p)->position >= currentPosition && (*p)->position < currentPosition + haplotypeLength) {
-                    readAlleleObs << '\t' << (*p)->sampleID << '\t' << (*p)->readID
-                        << '\t' << ((*p)->isFirstMate ? 1 : 2)
-                        << "\t-" << (*p)->alternateSequence << "-\t" << -(*p)->lnquality << '\n';
-                }
-            }
+            unsigned int shortCurrPos = static_cast<unsigned int>(currentPosition + 1);
+            readAlleleObs.write(reinterpret_cast<const char*>(&shortCurrPos), sizeof(shortCurrPos));
+
+            // readAlleleObs << currentSequenceName << ":" << currentPosition + 1;
+            // for (vector<Allele*>::iterator h = haplotypeObservations.begin(); h != haplotypeObservations.end(); ++h) {
+            //     if ((*h)->position == currentPosition && (*h)->referenceLength == haplotypeLength) {
+            //         readAlleleObs << '\t' << (*h)->sampleID << '\t' << (*h)->readID
+            //             << '\t' << ((*h)->isFirstMate ? 1 : 2)
+            //             << '\t' << (*h)->alternateSequence << '\t' << -(*h)->lnquality << '\n';
+            //     }
+            // }
+            // for (vector<Allele*>::iterator p = partialHaplotypeObservations.begin();
+            //         p != partialHaplotypeObservations.end(); ++p) {
+            //     if ((*p)->position >= currentPosition && (*p)->position < currentPosition + haplotypeLength) {
+            //         readAlleleObs << '\t' << (*p)->sampleID << '\t' << (*p)->readID
+            //             << '\t' << ((*p)->isFirstMate ? 1 : 2)
+            //             << "\t-" << (*p)->alternateSequence << "-\t" << -(*p)->lnquality << '\n';
+            //     }
+            // }
         }
 
         // now re-get the alleles

@@ -1,4 +1,4 @@
-// 
+//
 // freebayes
 //
 // A bayesian genetic variant detector.
@@ -101,7 +101,7 @@ int main (int argc, char *argv[]) {
     }
 
     // output VCF header
-    if (parameters.output == "vcf") {
+    if (parameters.output == "vcf" && parameters.readAlleleObsFile != "") {
         out << parser->variantCallFile.header << endl;
     }
 
@@ -119,15 +119,15 @@ int main (int argc, char *argv[]) {
         ++total_sites;
 
         DEBUG2("at start of main loop");
-        
+
         // did we switch chromosomes or exceed our gVCF chunk size, or do we not want to use chunks?
         // if so, we may need to output a gVCF record
         Results results;
-        if (parameters.gVCFout 
-               &&  !(nonCalls.empty()) 
+        if (parameters.gVCFout
+               &&  !(nonCalls.empty())
                &&  (  (parameters.gVCFNoChunk)
                    || (nonCalls.begin()->first != parser->currentSequenceName)
-                   || (parameters.gVCFchunk 
+                   || (parameters.gVCFchunk
                        && nonCalls.lastPos().second - nonCalls.firstPos().second >= parameters.gVCFchunk
                       )
                   )
@@ -320,6 +320,10 @@ int main (int argc, char *argv[]) {
         if (parameters.excludeUnobservedGenotypes && genotypeAlleles.size() > 2) {
             genotypeAlleles.push_back(nullAllele);
             usingNull = true;
+        }
+
+        if (parameters.readAlleleObsFile != "") {
+            continue;
         }
 
         ++processed_sites;

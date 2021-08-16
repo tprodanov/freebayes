@@ -174,7 +174,7 @@ void Parameters::usage(char** argv) {
         << "   --strict-vcf" << endl
         << "                   Generate strict VCF format (FORMAT/GQ will be an int)" << endl
         << "   --read-allele-obs FILE" << endl
-        << "                   Write read-allele observations to FILE." << endl
+        << "                   Write read-allele observations to FILE withint Parascopy pipeline." << endl
         << endl
         << "population model:" << endl
         << endl
