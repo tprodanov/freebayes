@@ -47,6 +47,7 @@ using namespace BamTools;
 #define ISPAIRED IsPaired()
 #define ISMATEMAPPED IsMateMapped()
 #define ISPROPERPAIR IsProperPair()
+#define ISFIRSTMATE IsFirstMate()
 #define CIGLEN Length
 #define CIGTYPE Type
 #define BAMREADER BamMultiReader
@@ -66,6 +67,7 @@ using namespace BamTools;
 #define ISPAIRED PairedFlag()
 #define ISMATEMAPPED MateMappedFlag()
 #define ISPROPERPAIR ProperPair()
+#define ISFIRSTMATE FirstFlag()
 #define ISREVERSESTRAND ReverseFlag()
 #define SEQLEN Length()
 #define BAMALIGN SeqLib::BamRecord

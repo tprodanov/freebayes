@@ -321,8 +321,9 @@ public:
     string currentReferenceHaplotype();
 
     // output files
-    ofstream logFile, outputFile;
+    ofstream outputFile;
     ostream* output;
+    ofstream readAlleleObs;
 
     // utility
     bool isCpG(string& altbase);

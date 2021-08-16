@@ -49,6 +49,7 @@ public:
     int baseQualityCap;
     double probContamination;
     string contaminationEstimateFile;
+    string readAlleleObsFile;
 
     // operation parameters
     bool useDuplicateReads;      // -E --use-duplicate-reads

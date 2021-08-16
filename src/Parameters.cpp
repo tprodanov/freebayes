@@ -173,6 +173,8 @@ void Parameters::usage(char** argv) {
         << "                   filtering is generally recommended over the use of this parameter." << endl
         << "   --strict-vcf" << endl
         << "                   Generate strict VCF format (FORMAT/GQ will be an int)" << endl
+        << "   --read-allele-obs FILE" << endl
+        << "                   Write read-allele observations to FILE." << endl
         << endl
         << "population model:" << endl
         << endl
@@ -418,6 +420,7 @@ Parameters::Parameters(int argc, char** argv) {
     gVCFchunk = 0;
     gVCFNoChunk = false;         // --gvcf-no-chunk sets this to true
     alleleObservationBiasFile = "";
+    readAlleleObsFile = "";
 
     // operation parameters
     useDuplicateReads = false;      // -E --use-duplicate-reads
@@ -552,6 +555,7 @@ Parameters::Parameters(int argc, char** argv) {
             {"theta", required_argument, 0, 'T'},
             {"pvar", required_argument, 0, 'P'},
             {"strict-vcf", no_argument, 0, '/'},
+            {"read-allele-obs", required_argument, 0, '>'},
             {"read-dependence-factor", required_argument, 0, 'D'},
             {"binomial-obs-priors-off", no_argument, 0, 'V'},
             {"allele-balance-priors-off", no_argument, 0, 'a'},
@@ -766,6 +770,10 @@ Parameters::Parameters(int argc, char** argv) {
 
         case '/':
             strictVCF = true;
+            break;
+
+        case '>':
+            readAlleleObsFile = optarg;
             break;
 
         case 'u':

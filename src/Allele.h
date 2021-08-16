@@ -113,7 +113,7 @@ public:
     char* currentReferenceBase;  // pointer to current reference base
     unsigned int length;    // and event length (deletion implies 0, snp implies 1, insertion >1)
     unsigned int referenceLength; // length of the event relative to the reference
-    long int repeatRightBoundary;  // if this allele is an indel, and if it is embedded in a tandem repeat 
+    long int repeatRightBoundary;  // if this allele is an indel, and if it is embedded in a tandem repeat
     // TODO cleanup
     int basesLeft;  // these are the "updated" versions of the above
     int basesRight;
@@ -133,6 +133,7 @@ public:
     bool isProperPair;    // if the allele is supported by a properly paired read
     bool isPaired;  // if the allele is supported by a read that is part of a pair
     bool isMateMapped;  // if the mate in the pair is mapped
+    bool isFirstMate;  // if the first mate in the pair
     bool genotypeAllele;    // if this is an abstract 'genotype' allele
     bool processed; // flag to mark if we've presented this allele for analysis
     string cigar; // a cigar representation of the allele
@@ -141,9 +142,9 @@ public:
     long int alignmentEnd;
 
     // default constructor, for converting alignments into allele observations
-    Allele(AlleleType t, 
+    Allele(AlleleType t,
            string& refname,
-           long int pos, 
+           long int pos,
            long int* crefpos,
            char* crefbase,
            unsigned int len,
@@ -155,13 +156,14 @@ public:
            string& readid,
            string& readgroupid,
            string& sqtech,
-           bool strnd, 
+           bool strnd,
            long double qual,
-           string qstr, 
+           string qstr,
            short mapqual,
            bool ispair,
            bool ismm,
            bool isproppair,
+           bool isfirstmate,
            string cigarstr,
            vector<Allele>* ra,
            long int bas,
@@ -184,11 +186,12 @@ public:
         , strand(strnd ? STRAND_FORWARD : STRAND_REVERSE)
         , quality((qual == -1) ? averageQuality(qstr) : qual) // passing -1 as quality triggers this calculation
         , lnquality(phred2ln((qual == -1) ? averageQuality(qstr) : qual))
-        , mapQuality(mapqual) 
+        , mapQuality(mapqual)
         , lnmapQuality(phred2ln(mapqual))
         , isProperPair(isproppair)
         , isPaired(ispair)
         , isMateMapped(ismm)
+        , isFirstMate(isfirstmate)
         , genotypeAllele(false)
         , processed(false)
         , readMismatchRate(0)
@@ -214,7 +217,7 @@ public:
 	   string cigarStr,
 	   long int pos=0,
 	   long int rrbound=0,
-	   bool gallele=true) 
+	   bool gallele=true)
         : type(t)
         , alternateSequence(alt)
         , length(len)
