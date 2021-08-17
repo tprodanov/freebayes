@@ -139,6 +139,11 @@ void AlleleParser::openBams(void) {
     DEBUG(" done");
 }
 
+bool isBigEndian() {
+    int num = 1;
+    return *(char *)&num != 1;
+}
+
 void AlleleParser::openOutputFile(void) {
     if (parameters.outputFile != "") {
         outputFile.open(parameters.outputFile.c_str(), ios::out);
@@ -156,6 +161,9 @@ void AlleleParser::openOutputFile(void) {
 
     if (parameters.readAlleleObsFile != "") {
         readAlleleObs.open(parameters.readAlleleObsFile.c_str(), ios::out & ios::binary);
+        // First byte is 0 if left-endian, 1 otherwise.
+        uint8_t right_endian = static_cast<uint8_t>(isBigEndian());
+        readAlleleObs.write(reinterpret_cast<const char*>(&right_endian), sizeof(right_endian));
     }
 }
 
@@ -3211,10 +3219,22 @@ void write_int(ofstream& out, T val) {
     out.write(reinterpret_cast<const char*>(&val), sizeof(val));
 }
 
+/// Write string length and then the string (without 0-termination).
+/// Do it this way because it is easier to read later.
+void write_str(ofstream& out, string const& str) {
+    size_t size = str.size();
+    if (size > 255) {
+        ERROR("Cannot write a string longer than 255 characters!");
+        exit(1);
+    }
+    write_int(out, static_cast<uint8_t>(size));
+    out.write(str.c_str(), size);
+}
+
 /// Replace sample names with 2-byte numbers.
 /// Binary format:
 ///     N = number of samples (2 bytes),
-///     N times: sample name (0-terminated C string).
+///     N times: sample name (see write_str).
 void AlleleParser::compressSampleNames() {
     if (!readAlleleObs.is_open())
         return;
@@ -3228,7 +3248,7 @@ void AlleleParser::compressSampleNames() {
     write_int(readAlleleObs, static_cast<u16>(nSamples));
     u16 sampleID = 0;
     for (vector<string>::iterator sample = sampleList.begin(); sample != sampleList.end(); ++sample) {
-        readAlleleObs.write(sample->c_str(), sample->size() + 1);
+        write_str(readAlleleObs, *sample);
         sampleIds[*sample] = sampleID++;
     }
 }
@@ -3265,12 +3285,12 @@ u64 readHash(Allele* read, map<string, u16>& samples) {
 /// * Allele observations:
 ///     allele index (unsigned 1 byte),
 ///     sample-read hash (unsigned 8 bytes) (see readHash).
-///     !!! If allele index > 250 - do not read sample-read hash.
+///     !!! If allele index >= 254 - do not read sample-read hash.
 ///     255 - there are not more observations,
-///     254 - too many alleles, stop writing.
+///     254 - some error, stop writing.
 /// * Alleles:
 ///     N = number of alleles (reference allele is first) (unsigned 1 byte),
-///     N alleles (0-terminated C strings).
+///     N alleles (see write_str).
 void AlleleParser::writeReadAlleleObservations(string const& refAllele,
         vector<Allele*> const& haplotypeObservations, vector<Allele*> const& partialObservations) {
     write_int(readAlleleObs, static_cast<unsigned int>(currentPosition + 1));
@@ -3284,14 +3304,16 @@ void AlleleParser::writeReadAlleleObservations(string const& refAllele,
         write_int(readAlleleObs, it->second);
     }
 
-    const int MAX_ALLELES = 10;
+    const size_t MAX_ALLELE_SIZE = 255;
+    const size_t MAX_ALLELES = 10;
     string alleles[MAX_ALLELES + 1] = { refAllele };
     string* allelesStart = alleles;
     string* allelesEnd = allelesStart + 1;
 
-    const uint8_t TOO_MANY_ALLELES = 254;
+    const uint8_t WAS_ERROR = 254;
     const uint8_t END_OBS = 255;
 
+    bool wasError = false;
     int haplotypeLength = refAllele.size();
     for (vector<Allele*>::const_iterator h = haplotypeObservations.begin(); h != haplotypeObservations.end(); ++h) {
         Allele* read = *h;
@@ -3301,28 +3323,33 @@ void AlleleParser::writeReadAlleleObservations(string const& refAllele,
         }
 
         string const& allele = read->alternateSequence;
+        if (allele.size() > MAX_ALLELE_SIZE) {
+            wasError = true;
+            break;
+        }
+
         string* allelesPos = find(allelesStart, allelesEnd, allele);
         if (allelesPos == allelesEnd) {
             *(allelesEnd++) = allele;
         }
         uint8_t alleleIx = static_cast<uint8_t>(allelesPos - allelesStart);
         if (alleleIx == MAX_ALLELES) {
-            write_int(readAlleleObs, TOO_MANY_ALLELES);
+            wasError = true;
             break;
         }
 
         write_int(readAlleleObs, alleleIx);
         write_int(readAlleleObs, readHash(read, sampleIds));
     }
-
-    uint8_t nAlleles = static_cast<uint8_t>(allelesEnd - allelesStart);
-    if (nAlleles > MAX_ALLELES) {
+    if (wasError) {
+        write_int(readAlleleObs, WAS_ERROR);
         return;
     }
+
     write_int(readAlleleObs, END_OBS);
-    write_int(readAlleleObs, nAlleles);
+    write_int(readAlleleObs, static_cast<uint8_t>(allelesEnd - allelesStart));
     for (string* allele = allelesStart; allele != allelesEnd; ++allele) {
-        readAlleleObs.write(allele->c_str(), allele->size() + 1);
+        write_str(readAlleleObs, *allele);
     }
 }
 
