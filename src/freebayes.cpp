@@ -101,7 +101,7 @@ int main (int argc, char *argv[]) {
     }
 
     // output VCF header
-    if (parameters.output == "vcf" && parameters.readAlleleObsFile != "") {
+    if (parameters.output == "vcf" && !parameters.noOutput) {
         out << parser->variantCallFile.header << endl;
     }
 
@@ -322,7 +322,7 @@ int main (int argc, char *argv[]) {
             usingNull = true;
         }
 
-        if (parameters.readAlleleObsFile != "") {
+        if (parameters.noOutput) {
             continue;
         }
 

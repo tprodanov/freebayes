@@ -50,6 +50,7 @@ public:
     double probContamination;
     string contaminationEstimateFile;
     string readAlleleObsFile;
+    bool noOutput;
 
     // operation parameters
     bool useDuplicateReads;      // -E --use-duplicate-reads

@@ -148,6 +148,8 @@ void AlleleParser::openOutputFile(void) {
             exit(1);
         }
         output = &outputFile;
+    } else if (parameters.noOutput) {
+        output = nullptr;
     } else {
         output = &cout;
     }
@@ -570,9 +572,6 @@ string AlleleParser::vcfHeader() {
 
 
 void AlleleParser::setupVCFOutput(void) {
-    if (readAlleleObs.is_open()) {
-        return;
-    }
     string vcfheader = vcfHeader();
     variantCallFile.openForOutput(vcfheader);
 }
@@ -931,6 +930,7 @@ AlleleParser::AlleleParser(int argc, char** argv) : parameters(Parameters(argc,a
     // add the samples from the input VCF to the mix)
     setupVCFInput();
 
+    compressSampleNames();
 
 }
 
@@ -3206,6 +3206,126 @@ bool RegisteredAlignment::fitHaplotype(int haplotypeStart, int haplotypeLength, 
 
 }
 
+template<typename T, typename std::enable_if<std::is_arithmetic<T>::value>::type* = nullptr>
+void write_int(ofstream& out, T val) {
+    out.write(reinterpret_cast<const char*>(&val), sizeof(val));
+}
+
+/// Replace sample names with 2-byte numbers.
+/// Binary format:
+///     N = number of samples (2 bytes),
+///     N times: sample name (0-terminated C string).
+void AlleleParser::compressSampleNames() {
+    if (!readAlleleObs.is_open())
+        return;
+
+    size_t nSamples = sampleList.size();
+    if (nSamples - 1 > numeric_limits<u16>::max()) {
+        ERROR("Number of samples is = 0 or > u16::max");
+        exit(1);
+    }
+
+    write_int(readAlleleObs, static_cast<u16>(nSamples));
+    u16 sampleID = 0;
+    for (vector<string>::iterator sample = sampleList.begin(); sample != sampleList.end(); ++sample) {
+        readAlleleObs.write(sample->c_str(), sample->size() + 1);
+        sampleIds[*sample] = sampleID++;
+    }
+}
+
+typedef unsigned long long u64;
+
+/// djb2 string hash.
+u64 stringHash(const char* str) {
+    u64 hash = 5381;
+    char c;
+    while ((c = *str++)) {
+        hash = ((hash << 5) + hash) + c;
+    }
+    return hash;
+}
+
+/// Last 16 bits = sample ID,
+/// Next 1 bit   = first (1) or second (0) mate,
+/// Next 47 bits = read name hash.
+u64 readHash(Allele* read, map<string, u16>& samples) {
+    u64 hash = stringHash(read->readID.c_str()) << 17;
+    hash |= read->isFirstMate ? 0x10000 : 0;
+    hash |= samples[read->sampleID];
+    return hash;
+}
+
+/// Write read allele observations in the following format:
+/// * Variant position (1-based) (unsigned 4 bytes).
+/// * Partial observations:
+///     N = number of samples with partial observations (unsigned 2 bytes),
+///     N times:
+///         sample ID (unsigned 2 bytes),
+///         number of partial observations (unsigned 2 bytes).
+/// * Allele observations:
+///     allele index (unsigned 1 byte),
+///     sample-read hash (unsigned 8 bytes) (see readHash).
+///     !!! If allele index > 250 - do not read sample-read hash.
+///     255 - there are not more observations,
+///     254 - too many alleles, stop writing.
+/// * Alleles:
+///     N = number of alleles (reference allele is first) (unsigned 1 byte),
+///     N alleles (0-terminated C strings).
+void AlleleParser::writeReadAlleleObservations(string const& refAllele,
+        vector<Allele*> const& haplotypeObservations, vector<Allele*> const& partialObservations) {
+    write_int(readAlleleObs, static_cast<unsigned int>(currentPosition + 1));
+    map<u16, u16> countPartialObs;
+    for (vector<Allele*>::const_iterator p = partialObservations.begin(); p != partialObservations.end(); ++p) {
+        ++countPartialObs[sampleIds[(*p)->sampleID]];
+    }
+    write_int(readAlleleObs, static_cast<u16>(countPartialObs.size()));
+    for (map<u16, u16>::const_iterator it = countPartialObs.begin(); it != countPartialObs.end(); ++it) {
+        write_int(readAlleleObs, it->first);
+        write_int(readAlleleObs, it->second);
+    }
+
+    const int MAX_ALLELES = 10;
+    string alleles[MAX_ALLELES + 1] = { refAllele };
+    string* allelesStart = alleles;
+    string* allelesEnd = allelesStart + 1;
+
+    const uint8_t TOO_MANY_ALLELES = 254;
+    const uint8_t END_OBS = 255;
+
+    int haplotypeLength = refAllele.size();
+    for (vector<Allele*>::const_iterator h = haplotypeObservations.begin(); h != haplotypeObservations.end(); ++h) {
+        Allele* read = *h;
+        if (!(read->position == currentPosition && read->referenceLength == haplotypeLength)) {
+            ERROR("Position does not match " << read->position << ' ' << currentPosition << ' '
+                << read->referenceLength << ' ' <<  haplotypeLength);
+        }
+
+        string const& allele = read->alternateSequence;
+        string* allelesPos = find(allelesStart, allelesEnd, allele);
+        if (allelesPos == allelesEnd) {
+            *(allelesEnd++) = allele;
+        }
+        uint8_t alleleIx = static_cast<uint8_t>(allelesPos - allelesStart);
+        if (alleleIx == MAX_ALLELES) {
+            write_int(readAlleleObs, TOO_MANY_ALLELES);
+            break;
+        }
+
+        write_int(readAlleleObs, alleleIx);
+        write_int(readAlleleObs, readHash(read, sampleIds));
+    }
+
+    uint8_t nAlleles = static_cast<uint8_t>(allelesEnd - allelesStart);
+    if (nAlleles > MAX_ALLELES) {
+        return;
+    }
+    write_int(readAlleleObs, END_OBS);
+    write_int(readAlleleObs, nAlleles);
+    for (string* allele = allelesStart; allele != allelesEnd; ++allele) {
+        readAlleleObs.write(allele->c_str(), allele->size() + 1);
+    }
+}
+
 void AlleleParser::buildHaplotypeAlleles(
     vector<Allele>& alleles,
     Samples& samples,
@@ -3355,28 +3475,6 @@ void AlleleParser::buildHaplotypeAlleles(
         }
         DEBUG("done updating");
 
-        if (readAlleleObs.is_open()) {
-            unsigned int shortCurrPos = static_cast<unsigned int>(currentPosition + 1);
-            readAlleleObs.write(reinterpret_cast<const char*>(&shortCurrPos), sizeof(shortCurrPos));
-
-            // readAlleleObs << currentSequenceName << ":" << currentPosition + 1;
-            // for (vector<Allele*>::iterator h = haplotypeObservations.begin(); h != haplotypeObservations.end(); ++h) {
-            //     if ((*h)->position == currentPosition && (*h)->referenceLength == haplotypeLength) {
-            //         readAlleleObs << '\t' << (*h)->sampleID << '\t' << (*h)->readID
-            //             << '\t' << ((*h)->isFirstMate ? 1 : 2)
-            //             << '\t' << (*h)->alternateSequence << '\t' << -(*h)->lnquality << '\n';
-            //     }
-            // }
-            // for (vector<Allele*>::iterator p = partialHaplotypeObservations.begin();
-            //         p != partialHaplotypeObservations.end(); ++p) {
-            //     if ((*p)->position >= currentPosition && (*p)->position < currentPosition + haplotypeLength) {
-            //         readAlleleObs << '\t' << (*p)->sampleID << '\t' << (*p)->readID
-            //             << '\t' << ((*p)->isFirstMate ? 1 : 2)
-            //             << "\t-" << (*p)->alternateSequence << "-\t" << -(*p)->lnquality << '\n';
-            //     }
-            // }
-        }
-
         // now re-get the alleles
         getAlleles(samples, allowedAlleleTypes, haplotypeLength, false, true);
 
@@ -3402,6 +3500,27 @@ void AlleleParser::buildHaplotypeAlleles(
                                           convert(haplotypeLength)+"M",
                                           haplotypeLength,
                                           currentPosition);
+
+        if (readAlleleObs.is_open()) {
+            // cout << currentSequenceName << ":" << currentPosition + 1 << ':' << refAllele.referenceSequence << ':'
+            //     << refAllele.alternateSequence << endl;
+            // for (vector<Allele*>::iterator h = haplotypeObservations.begin(); h != haplotypeObservations.end(); ++h) {
+            //     if ((*h)->position == currentPosition && (*h)->referenceLength == haplotypeLength) {
+            //         cout << '\t' << (*h)->sampleID << '\t' << (*h)->readID
+            //             << '\t' << ((*h)->isFirstMate ? 1 : 2)
+            //             << '\t' << (*h)->alternateSequence << '\t' << -(*h)->lnquality << '\n';
+            //     }
+            // }
+            // for (vector<Allele*>::iterator p = partialHaplotypeObservations.begin();
+            //         p != partialHaplotypeObservations.end(); ++p) {
+            //     if ((*p)->position >= currentPosition && (*p)->position < currentPosition + haplotypeLength) {
+            //         cout << '\t' << (*p)->sampleID << '\t' << (*p)->readID
+            //             << '\t' << ((*p)->isFirstMate ? 1 : 2)
+            //             << "\t-" << (*p)->alternateSequence << "-\t" << -(*p)->lnquality << '\n';
+            //     }
+            // }
+            writeReadAlleleObservations(refAllele.alternateSequence, haplotypeObservations, partialHaplotypeObservations);
+        }
 
         // are there two alleles with the same alt sequence?
         // if so, homogenize them, and then re-sort the alleles

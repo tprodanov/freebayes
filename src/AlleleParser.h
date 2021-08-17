@@ -41,6 +41,8 @@
 
 using namespace std;
 
+typedef unsigned short u16;
+
 // a structure holding information about our parameters
 
 // structure to encapsulate registered reads and alleles
@@ -332,6 +334,10 @@ public:
 
 private:
 
+    void compressSampleNames();
+    void writeReadAlleleObservations(string const& refAllele,
+        vector<Allele*> const& haplotypeObservations, vector<Allele*> const& partialObservations);
+
     bool justSwitchedTargets;  // to trigger clearing of queues, maps and such holding Allele*'s on jump
 
     Allele* currentReferenceAllele;
@@ -351,6 +357,8 @@ private:
     int currentRefID;
     BAMALIGN currentAlignment;
     vcflib::Variant* currentVariant;
+
+    map<string, u16> sampleIds;
 
 };
 
