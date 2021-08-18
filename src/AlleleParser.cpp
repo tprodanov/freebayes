@@ -3255,8 +3255,7 @@ void AlleleParser::compressSampleNames() {
 
 typedef unsigned long long u64;
 
-/// djb2 string hash.
-u64 stringHash(const char* str) {
+u64 stringHash_djb2(const char* str) {
     u64 hash = 5381;
     char c;
     while ((c = *str++)) {
@@ -3265,14 +3264,26 @@ u64 stringHash(const char* str) {
     return hash;
 }
 
-/// Last 16 bits = sample ID,
-/// Next 1 bit   = first (1) or second (0) mate,
-/// Next 47 bits = read name hash.
-u64 readHash(Allele* read, map<string, u16>& samples) {
-    u64 hash = stringHash(read->readID.c_str()) << 17;
-    hash |= read->isFirstMate ? 0x10000 : 0;
-    hash |= samples[read->sampleID];
+u64 stringHash_fnv1(const char* str) {
+    const u64 fnvOffsetBasis = 0xcbf29ce484222325;
+    const u64 fnvPrime = 0x100000001b3;
+
+    u64 hash = fnvOffsetBasis;
+    char c;
+    while ((c = *str++)) {
+        hash *= fnvPrime;
+        hash ^= c;
+    }
     return hash;
+}
+
+/// * Sample ID (unsigned 2 bytes),
+/// * Read name hash (unsigned 8 bytes), last bit = first (1) or second (0) mate.
+void writeReadHash(Allele* read, map<string, u16>& samples, ofstream& out) {
+    write_int(out, samples[read->sampleID]);
+    u64 hash = stringHash_fnv1(read->readID.c_str()) << 1;
+    hash |= static_cast<u64>(read->isFirstMate);
+    write_int(out, hash);
 }
 
 /// Write read allele observations in the following format:
@@ -3284,10 +3295,12 @@ u64 readHash(Allele* read, map<string, u16>& samples) {
 ///         number of partial observations (unsigned 2 bytes).
 /// * Allele observations:
 ///     allele index (unsigned 1 byte),
-///     sample-read hash (unsigned 8 bytes) (see readHash).
-///     !!! If allele index >= 254 - do not read sample-read hash.
 ///     255 - there are not more observations,
 ///     254 - some error, stop writing.
+///
+///     sample id (unsigned 2 bytes),
+///     read hash (unsigned 8 bytes) (see writeReadHash).
+///     !!! If allele index >= 254 - do not read sample-read hash.
 /// * Alleles:
 ///     N = number of alleles (reference allele is first) (unsigned 1 byte),
 ///     N alleles (see write_str).
@@ -3339,7 +3352,7 @@ void AlleleParser::writeReadAlleleObservations(string const& refAllele,
         }
 
         write_int(readAlleleObs, alleleIx);
-        write_int(readAlleleObs, readHash(read, sampleIds));
+        writeReadHash(read, sampleIds, readAlleleObs);
     }
     if (wasError) {
         write_int(readAlleleObs, WAS_ERROR);
