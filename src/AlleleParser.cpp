@@ -3287,7 +3287,7 @@ void writeReadHash(Allele* read, map<string, u16>& samples, ofstream& out) {
 }
 
 /// Write read allele observations in the following format:
-/// * Variant position (1-based) (unsigned 4 bytes).
+/// * Variant position (0-based) (unsigned 4 bytes).
 /// * Partial observations:
 ///     N = number of samples with partial observations (unsigned 2 bytes),
 ///     N times:
@@ -3306,7 +3306,7 @@ void writeReadHash(Allele* read, map<string, u16>& samples, ofstream& out) {
 ///     N alleles (see write_str).
 void AlleleParser::writeReadAlleleObservations(string const& refAllele,
         vector<Allele*> const& haplotypeObservations, vector<Allele*> const& partialObservations) {
-    write_int(readAlleleObs, static_cast<unsigned int>(currentPosition + 1));
+    write_int(readAlleleObs, static_cast<unsigned int>(currentPosition));
     map<u16, u16> countPartialObs;
     for (vector<Allele*>::const_iterator p = partialObservations.begin(); p != partialObservations.end(); ++p) {
         ++countPartialObs[sampleIds[(*p)->sampleID]];
