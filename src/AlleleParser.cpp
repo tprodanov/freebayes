@@ -144,6 +144,11 @@ bool isBigEndian() {
     return *(char *)&num != 1;
 }
 
+template<typename T, typename std::enable_if<std::is_arithmetic<T>::value>::type* = nullptr>
+void write_int(ofstream& out, T val) {
+    out.write(reinterpret_cast<const char*>(&val), sizeof(val));
+}
+
 void AlleleParser::openOutputFile(void) {
     if (parameters.outputFile != "") {
         outputFile.open(parameters.outputFile.c_str(), ios::out);
@@ -162,8 +167,14 @@ void AlleleParser::openOutputFile(void) {
     if (parameters.readAlleleObsFile != "") {
         readAlleleObs.open(parameters.readAlleleObsFile.c_str(), ios::out & ios::binary);
         // First byte is 0 if left-endian, 1 otherwise.
-        uint8_t right_endian = static_cast<uint8_t>(isBigEndian());
-        readAlleleObs.write(reinterpret_cast<const char*>(&right_endian), sizeof(right_endian));
+        write_int(readAlleleObs, static_cast<uint8_t>(isBigEndian()));
+    }
+    if (parameters.readCoordinatesFile != "") {
+        if (readAlleleObs.is_open()) {
+            readCoordinates.open(parameters.readCoordinatesFile.c_str(), ios::out & ios::binary);
+        } else {
+            ERROR("Cannot write read coordinates without writing read-allele-observations!");
+        }
     }
 }
 
@@ -2062,6 +2073,11 @@ void AlleleParser::updateAlignmentQueue(long int position,
                 }
                 // get sample name
                 string sampleName = readGroupToSampleNames[readGroup];
+
+                if (readCoordinates.is_open()) {
+                    writeReadCoordinates(sampleName);
+                }
+
                 string sequencingTech;
                 map<string, string>::iterator t = readGroupToTechnology.find(readGroup);
                 if (t != readGroupToTechnology.end()) {
@@ -3214,11 +3230,6 @@ bool RegisteredAlignment::fitHaplotype(int haplotypeStart, int haplotypeLength, 
 
 }
 
-template<typename T, typename std::enable_if<std::is_arithmetic<T>::value>::type* = nullptr>
-void write_int(ofstream& out, T val) {
-    out.write(reinterpret_cast<const char*>(&val), sizeof(val));
-}
-
 /// Write string length and then the string (without 0-termination).
 /// Do it this way because it is easier to read later.
 void write_str(ofstream& out, string const& str) {
@@ -3253,8 +3264,6 @@ void AlleleParser::compressSampleNames() {
     }
 }
 
-typedef unsigned long long u64;
-
 u64 stringHash_djb2(const char* str) {
     u64 hash = 5381;
     char c;
@@ -3279,11 +3288,32 @@ u64 stringHash_fnv1(const char* str) {
 
 /// * Sample ID (unsigned 2 bytes),
 /// * Read name hash (unsigned 8 bytes), last bit = first (1) or second (0) mate.
-void writeReadHash(Allele* read, map<string, u16>& samples, ofstream& out) {
-    write_int(out, samples[read->sampleID]);
-    u64 hash = stringHash_fnv1(read->readID.c_str()) << 1;
-    hash |= static_cast<u64>(read->isFirstMate);
+void AlleleParser::writeReadHash(string const& sampleName, string const& readName, bool isFirstMate, ofstream& out)
+        const {
+    write_int(out, sampleIds.at(sampleName));
+    u64 hash = stringHash_fnv1(readName.c_str()) << 1;
+    DEBUG("Hash " << sampleName << ' ' << readName << " = " << hash);
+    hash |= static_cast<u64>(isFirstMate);
     write_int(out, hash);
+}
+
+void AlleleParser::writeReadHash(Allele const* read, ofstream& out) const {
+    writeReadHash(read->sampleID, read->readID, read->isFirstMate, out);
+}
+
+/// Write read coordinates in the following format:
+/// * Sample id (unsigned 2 bytes),
+/// * Read hash (unsigned 8 bytes), (see writeReadHash),
+/// * Sequence length (unsigned 2 bytes),
+/// * Alignment start (0-based), (unsigned 4 bytes),
+/// * Alignment length (unsigned 2 bytes).
+void AlleleParser::writeReadCoordinates(string const& sampleName) {
+    const u32 MAX = static_cast<u32>(numeric_limits<u16>::max());
+    writeReadHash(sampleName, currentAlignment.QNAME, currentAlignment.ISFIRSTMATE, readCoordinates);
+    write_int(readCoordinates, static_cast<u16>(min(MAX, static_cast<u32>(currentAlignment.SEQLEN))));
+    write_int(readCoordinates, static_cast<u32>(currentAlignment.POSITION));
+    u32 alnLen = currentAlignment.ENDPOSITION - currentAlignment.POSITION;
+    write_int(readCoordinates, static_cast<u16>(min(MAX, alnLen)));
 }
 
 /// Write read allele observations in the following format:
@@ -3301,7 +3331,7 @@ void writeReadHash(Allele* read, map<string, u16>& samples, ofstream& out) {
 ///     sample id (unsigned 2 bytes),
 ///     read hash (unsigned 8 bytes) (see writeReadHash).
 ///     !!! If allele index >= 254 - do not read sample-read hash.
-/// * Alleles:
+/// * Alleles
 ///     N = number of alleles (reference allele is first) (unsigned 1 byte),
 ///     N alleles (see write_str).
 void AlleleParser::writeReadAlleleObservations(string const& refAllele,
@@ -3352,7 +3382,7 @@ void AlleleParser::writeReadAlleleObservations(string const& refAllele,
         }
 
         write_int(readAlleleObs, alleleIx);
-        writeReadHash(read, sampleIds, readAlleleObs);
+        writeReadHash(read, readAlleleObs);
     }
     if (wasError) {
         write_int(readAlleleObs, WAS_ERROR);

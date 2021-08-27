@@ -42,6 +42,8 @@
 using namespace std;
 
 typedef unsigned short u16;
+typedef unsigned int u32;
+typedef unsigned long long u64;
 
 // a structure holding information about our parameters
 
@@ -326,6 +328,7 @@ public:
     ofstream outputFile;
     ostream* output;
     ofstream readAlleleObs;
+    ofstream readCoordinates;
 
     // utility
     bool isCpG(string& altbase);
@@ -337,6 +340,10 @@ private:
     void compressSampleNames();
     void writeReadAlleleObservations(string const& refAllele,
         vector<Allele*> const& haplotypeObservations, vector<Allele*> const& partialObservations);
+
+    void writeReadHash(string const& sampleName, string const& readName, bool isFirstMate, ofstream& out) const;
+    void writeReadHash(Allele const* allele, ofstream& out) const;
+    void writeReadCoordinates(string const& sampleName);
 
     bool justSwitchedTargets;  // to trigger clearing of queues, maps and such holding Allele*'s on jump
 

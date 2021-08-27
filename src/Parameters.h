@@ -50,6 +50,7 @@ public:
     double probContamination;
     string contaminationEstimateFile;
     string readAlleleObsFile;
+    string readCoordinatesFile;
     bool noOutput;
 
     // operation parameters
