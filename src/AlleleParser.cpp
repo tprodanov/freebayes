@@ -169,13 +169,6 @@ void AlleleParser::openOutputFile(void) {
         // First byte is 0 if left-endian, 1 otherwise.
         write_int(readAlleleObs, static_cast<uint8_t>(isBigEndian()));
     }
-    if (parameters.readCoordinatesFile != "") {
-        if (readAlleleObs.is_open()) {
-            readCoordinates.open(parameters.readCoordinatesFile.c_str(), ios::out & ios::binary);
-        } else {
-            ERROR("Cannot write read coordinates without writing read-allele-observations!");
-        }
-    }
 }
 
 void AlleleParser::getSequencingTechnologies(void) {
@@ -2074,10 +2067,6 @@ void AlleleParser::updateAlignmentQueue(long int position,
                 // get sample name
                 string sampleName = readGroupToSampleNames[readGroup];
 
-                if (readCoordinates.is_open()) {
-                    writeReadCoordinates(sampleName);
-                }
-
                 string sequencingTech;
                 map<string, string>::iterator t = readGroupToTechnology.find(readGroup);
                 if (t != readGroupToTechnology.end()) {
@@ -3299,21 +3288,6 @@ void AlleleParser::writeReadHash(string const& sampleName, string const& readNam
 
 void AlleleParser::writeReadHash(Allele const* read, ofstream& out) const {
     writeReadHash(read->sampleID, read->readID, read->isFirstMate, out);
-}
-
-/// Write read coordinates in the following format:
-/// * Sample id (unsigned 2 bytes),
-/// * Read hash (unsigned 8 bytes), (see writeReadHash),
-/// * Sequence length (unsigned 2 bytes),
-/// * Alignment start (0-based), (unsigned 4 bytes),
-/// * Alignment length (unsigned 2 bytes).
-void AlleleParser::writeReadCoordinates(string const& sampleName) {
-    const u32 MAX = static_cast<u32>(numeric_limits<u16>::max());
-    writeReadHash(sampleName, currentAlignment.QNAME, currentAlignment.ISFIRSTMATE, readCoordinates);
-    write_int(readCoordinates, static_cast<u16>(min(MAX, static_cast<u32>(currentAlignment.SEQLEN))));
-    write_int(readCoordinates, static_cast<u32>(currentAlignment.POSITION));
-    u32 alnLen = currentAlignment.ENDPOSITION - currentAlignment.POSITION;
-    write_int(readCoordinates, static_cast<u16>(min(MAX, alnLen)));
 }
 
 /// Write read allele observations in the following format:

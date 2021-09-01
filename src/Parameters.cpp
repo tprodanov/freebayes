@@ -175,8 +175,6 @@ void Parameters::usage(char** argv) {
         << "                   Generate strict VCF format (FORMAT/GQ will be an int)" << endl
         << "   --read-allele-obs FILE" << endl
         << "                   Write read-allele observations to a binary FILE (Parascopy pipeline)." << endl
-        << "   --read-coordinates FILE" << endl
-        << "                   Write read coordinates to a binary FILE (Parascopy pipeline)." << endl
         << "   --no-output     Do not calculate genotypes and do not output a VCF file." << endl
         << endl
         << "population model:" << endl
@@ -424,7 +422,6 @@ Parameters::Parameters(int argc, char** argv) {
     gVCFNoChunk = false;         // --gvcf-no-chunk sets this to true
     alleleObservationBiasFile = "";
     readAlleleObsFile = "";
-    readCoordinatesFile = "";
 
     // operation parameters
     useDuplicateReads = false;      // -E --use-duplicate-reads
@@ -560,7 +557,6 @@ Parameters::Parameters(int argc, char** argv) {
             {"pvar", required_argument, 0, 'P'},
             {"strict-vcf", no_argument, 0, '/'},
             {"read-allele-obs", required_argument, 0, '>'},
-            {"read-coordinates", required_argument, 0, '~'},
             {"no-output", no_argument, 0, '<'},
             {"read-dependence-factor", required_argument, 0, 'D'},
             {"binomial-obs-priors-off", no_argument, 0, 'V'},
@@ -784,10 +780,6 @@ Parameters::Parameters(int argc, char** argv) {
 
         case '<':
             noOutput = true;
-            break;
-
-        case '~':
-            readCoordinatesFile = optarg;
             break;
 
         case 'u':

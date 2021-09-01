@@ -328,7 +328,6 @@ public:
     ofstream outputFile;
     ostream* output;
     ofstream readAlleleObs;
-    ofstream readCoordinates;
 
     // utility
     bool isCpG(string& altbase);
@@ -343,7 +342,6 @@ private:
 
     void writeReadHash(string const& sampleName, string const& readName, bool isFirstMate, ofstream& out) const;
     void writeReadHash(Allele const* allele, ofstream& out) const;
-    void writeReadCoordinates(string const& sampleName);
 
     bool justSwitchedTargets;  // to trigger clearing of queues, maps and such holding Allele*'s on jump
 
