@@ -453,7 +453,7 @@ For more information, please refer to a post by Brad Chapman [on minimal BAM pre
 
 To download freebayes, please use git to download the most recent development tree:
 
-    git clone --recursive https://github.com/freebayes/freebayes.git
+    git clone --recursive https://github.com/tprodanov/freebayes.git
 
 On Debian you'll need a gcc compiler and want packages:
 
