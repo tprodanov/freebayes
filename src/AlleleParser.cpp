@@ -3298,13 +3298,13 @@ void AlleleParser::writeReadHash(Allele const* read, ofstream& out) const {
 ///         sample ID (unsigned 2 bytes),
 ///         number of partial observations (unsigned 2 bytes).
 /// * Allele observations:
-///     allele index (unsigned 1 byte),
-///     255 - there are not more observations,
-///     254 - some error, stop writing.
+///     allele index (unsigned 1 byte).
+///         If 255 -- there are no more observations, stop reading.
+///         If 254 -- errorneous observation, sample-id, read hash and quality are not set.
 ///
 ///     sample id (unsigned 2 bytes),
-///     read hash (unsigned 8 bytes) (see writeReadHash).
-///     !!! If allele index >= 254 - do not read sample-read hash.
+///     read hash (unsigned 8 bytes) (see writeReadHash),
+///     -25 * <natural log observation quality> (unsigned 1 byte): 0 -> 0, -10.2 -> 255.
 /// * Alleles
 ///     N = number of alleles (reference allele is first) (unsigned 1 byte),
 ///     N alleles (see write_str).
@@ -3329,6 +3329,7 @@ void AlleleParser::writeReadAlleleObservations(string const& refAllele,
 
     const uint8_t WAS_ERROR = 254;
     const uint8_t END_OBS = 255;
+    const double QUAL_MULT = -25.0;
 
     bool wasError = false;
     int haplotypeLength = refAllele.size();
@@ -3357,6 +3358,9 @@ void AlleleParser::writeReadAlleleObservations(string const& refAllele,
 
         write_int(readAlleleObs, alleleIx);
         writeReadHash(read, readAlleleObs);
+        double dblScaledQual = floor(QUAL_MULT * static_cast<double>(read->lnquality));
+        uint8_t scaledQual = static_cast<uint8_t>(min(255.0, max(0.0, dblScaledQual)));
+        write_int(readAlleleObs, scaledQual);
     }
     if (wasError) {
         write_int(readAlleleObs, WAS_ERROR);
