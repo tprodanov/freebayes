@@ -3290,6 +3290,39 @@ void AlleleParser::writeReadHash(Allele const* read, ofstream& out) const {
     writeReadHash(read->sampleID, read->readID, read->isFirstMate, out);
 }
 
+const size_t MAX_ALLELE_SIZE = 255;
+// Output at most 15 alleles (including reference).
+const size_t MAX_ALLELES = 15;
+
+/// Find most common alleles (at most MAX_ALLELES), write them into `outAlleles` and return the number of alleles.
+/// Return 0 if one of the common alleles was too long (over 255 symbols).
+size_t find_common_alleles(string const& refAllele, vector<Allele*> const& haplotypeObservations, string* outAlleles) {
+    std::unordered_map<string, u16> counts;
+    for (vector<Allele*>::const_iterator h = haplotypeObservations.begin(); h != haplotypeObservations.end(); ++h) {
+        string const& allele = (*h)->alternateSequence;
+        if (allele != refAllele) {
+            ++counts[(*h)->alternateSequence];
+        }
+    }
+    vector<std::pair<string, u16>> counts_vec;
+    counts_vec.reserve(counts.size());
+    for (std::unordered_map<string, u16>::iterator it = counts.begin(); it != counts.end(); ++it) {
+        counts_vec.push_back(*it);
+    }
+    std::sort(counts_vec.begin(), counts_vec.end(),
+        [](std::pair<string, u16> const& a, std::pair<string, u16> const& b) {return a.second > b.second; });
+    outAlleles[0] = refAllele;
+
+    size_t j = 1;
+    for (std::vector<std::pair<string, u16>>::iterator it = counts_vec.begin(); it != counts_vec.end(); ++it) {
+        if (it->second <= 1 || j >= MAX_ALLELES) {
+            break;
+        }
+        outAlleles[j++] = it->first;
+    }
+    return j;
+}
+
 /// Write read allele observations in the following format:
 /// * Variant position (0-based) (unsigned 4 bytes).
 /// * Partial observations:
@@ -3321,54 +3354,40 @@ void AlleleParser::writeReadAlleleObservations(string const& refAllele,
         write_int(readAlleleObs, it->second);
     }
 
-    const size_t MAX_ALLELE_SIZE = 255;
-    const size_t MAX_ALLELES = 10;
-    string alleles[MAX_ALLELES + 1] = { refAllele };
-    string* allelesStart = alleles;
-    string* allelesEnd = allelesStart + 1;
-
     const uint8_t WAS_ERROR = 254;
     const uint8_t END_OBS = 255;
     const double QUAL_MULT = -25.0;
 
-    bool wasError = false;
+    string alleles[MAX_ALLELES];
+    size_t n_alleles = find_common_alleles(refAllele, haplotypeObservations, alleles);
+    if (n_alleles == 0) {
+        write_int(readAlleleObs, WAS_ERROR);
+        return;
+    }
+    string* allelesStart = alleles;
+    string* allelesEnd = allelesStart + n_alleles;
+
     int haplotypeLength = refAllele.size();
     for (vector<Allele*>::const_iterator h = haplotypeObservations.begin(); h != haplotypeObservations.end(); ++h) {
         Allele* read = *h;
         if (!(read->position == currentPosition && read->referenceLength == haplotypeLength)) {
             ERROR("Position does not match " << read->position << ' ' << currentPosition << ' '
-                << read->referenceLength << ' ' <<  haplotypeLength);
+                << read->referenceLength << ' ' << haplotypeLength);
         }
 
         string const& allele = read->alternateSequence;
-        if (allele.size() > MAX_ALLELE_SIZE) {
-            wasError = true;
-            break;
-        }
-
         string* allelesPos = find(allelesStart, allelesEnd, allele);
-        if (allelesPos == allelesEnd) {
-            *(allelesEnd++) = allele;
+        if (allelesPos != allelesEnd) {
+            write_int(readAlleleObs, static_cast<uint8_t>(allelesPos - allelesStart));
+            writeReadHash(read, readAlleleObs);
+            double dblScaledQual = floor(QUAL_MULT * static_cast<double>(read->lnquality));
+            uint8_t scaledQual = static_cast<uint8_t>(min(255.0, max(0.0, dblScaledQual)));
+            write_int(readAlleleObs, scaledQual);
         }
-        uint8_t alleleIx = static_cast<uint8_t>(allelesPos - allelesStart);
-        if (alleleIx == MAX_ALLELES) {
-            wasError = true;
-            break;
-        }
-
-        write_int(readAlleleObs, alleleIx);
-        writeReadHash(read, readAlleleObs);
-        double dblScaledQual = floor(QUAL_MULT * static_cast<double>(read->lnquality));
-        uint8_t scaledQual = static_cast<uint8_t>(min(255.0, max(0.0, dblScaledQual)));
-        write_int(readAlleleObs, scaledQual);
-    }
-    if (wasError) {
-        write_int(readAlleleObs, WAS_ERROR);
-        return;
     }
 
     write_int(readAlleleObs, END_OBS);
-    write_int(readAlleleObs, static_cast<uint8_t>(allelesEnd - allelesStart));
+    write_int(readAlleleObs, static_cast<uint8_t>(n_alleles));
     for (string* allele = allelesStart; allele != allelesEnd; ++allele) {
         write_str(readAlleleObs, *allele);
     }
