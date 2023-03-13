@@ -3318,7 +3318,7 @@ size_t find_common_alleles(string const& refAllele, vector<Allele*> const& haplo
         if (it->second <= 1 || j >= MAX_ALLELES) {
             break;
         }
-        if (it->first.size() >= MAX_ALLELE_SIZE) {
+        if (it->first.size() > MAX_ALLELE_SIZE) {
             return 0;
         }
         outAlleles[j++] = it->first;
@@ -3361,6 +3361,11 @@ void AlleleParser::writeReadAlleleObservations(string const& refAllele,
     const uint8_t END_OBS = 255;
     const double QUAL_MULT = -25.0;
 
+    int haplotypeLength = refAllele.size();
+    if (haplotypeLength > MAX_ALLELE_SIZE) {
+        write_int(readAlleleObs, WAS_ERROR);
+        return;
+    }
     string alleles[MAX_ALLELES];
     size_t n_alleles = find_common_alleles(refAllele, haplotypeObservations, alleles);
     if (n_alleles == 0) {
@@ -3370,7 +3375,6 @@ void AlleleParser::writeReadAlleleObservations(string const& refAllele,
     string* allelesStart = alleles;
     string* allelesEnd = allelesStart + n_alleles;
 
-    int haplotypeLength = refAllele.size();
     for (vector<Allele*>::const_iterator h = haplotypeObservations.begin(); h != haplotypeObservations.end(); ++h) {
         Allele* read = *h;
         if (!(read->position == currentPosition && read->referenceLength == haplotypeLength)) {
