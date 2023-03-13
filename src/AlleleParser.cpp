@@ -3318,6 +3318,9 @@ size_t find_common_alleles(string const& refAllele, vector<Allele*> const& haplo
         if (it->second <= 1 || j >= MAX_ALLELES) {
             break;
         }
+        if (it->first.size() >= MAX_ALLELE_SIZE) {
+            return 0;
+        }
         outAlleles[j++] = it->first;
     }
     return j;
